@@ -105,6 +105,9 @@ Kubeflow Diagram
 ![Kubeflow Diagram](screenshots/kubeflow_pipeline.png)
 
 2. Updated flow with hyperparameter tuning in parallel
+
+The pipeline begins by fetching and validating the dataset, then runs three hyperparameter configurations of a Random Forest classifier in parallel to identify the best-performing model. The winning model is automatically compared against the current production "champion" model, and if it achieves higher accuracy, it is registered and promoted as the new champion. This design demonstrates key MLOps patterns including parallel experimentation, automated model selection, champion-challenger evaluation, and conditional deployment, all orchestrated as a reproducible, version-controlled pipeline using KFP's component and DSL framework.
+
 ![Updated Kubeflow Diagram](screenshots/updated_kubeflow_pipeline.png)
 ---
 
