@@ -1,0 +1,699 @@
+# PIPELINE DEFINITION
+# Name: iris-advanced-mlops-pipeline
+# Description: Fetch, validate, parallel hyperparameter-tune, select best, compare vs champion, register+deploy if better
+components:
+  comp-condition-1:
+    dag:
+      tasks:
+        register-model:
+          cachingOptions:
+            enableCache: true
+          componentRef:
+            name: comp-register-model
+          inputs:
+            artifacts:
+              model:
+                componentInputArtifact: pipelinechannel--select-best-model-best_model
+            parameters:
+              accuracy:
+                componentInputParameter: pipelinechannel--select-best-model-best_accuracy
+              config:
+                componentInputParameter: pipelinechannel--select-best-model-best_config
+          taskInfo:
+            name: register-model
+    inputDefinitions:
+      artifacts:
+        pipelinechannel--select-best-model-best_model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        pipelinechannel--get-champion-accuracy-Output:
+          parameterType: NUMBER_DOUBLE
+        pipelinechannel--select-best-model-best_accuracy:
+          parameterType: NUMBER_DOUBLE
+        pipelinechannel--select-best-model-best_config:
+          parameterType: STRING
+  comp-fetch-data:
+    executorLabel: exec-fetch-data
+    outputDefinitions:
+      artifacts:
+        output_csv:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-get-champion-accuracy:
+    executorLabel: exec-get-champion-accuracy
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: NUMBER_DOUBLE
+  comp-register-model:
+    executorLabel: exec-register-model
+    inputDefinitions:
+      artifacts:
+        model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        accuracy:
+          parameterType: NUMBER_DOUBLE
+        config:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        registered_model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+  comp-select-best-model:
+    executorLabel: exec-select-best-model
+    inputDefinitions:
+      artifacts:
+        model_a:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        model_b:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        model_c:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        accuracy_a:
+          parameterType: NUMBER_DOUBLE
+        accuracy_b:
+          parameterType: NUMBER_DOUBLE
+        accuracy_c:
+          parameterType: NUMBER_DOUBLE
+        config_a:
+          parameterType: STRING
+        config_b:
+          parameterType: STRING
+        config_c:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        best_model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        best_accuracy:
+          parameterType: NUMBER_DOUBLE
+        best_config:
+          parameterType: STRING
+  comp-train-model:
+    executorLabel: exec-train-model
+    inputDefinitions:
+      artifacts:
+        input_csv:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        max_depth:
+          parameterType: NUMBER_INTEGER
+        n_estimators:
+          parameterType: NUMBER_INTEGER
+    outputDefinitions:
+      artifacts:
+        model_output:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        accuracy:
+          parameterType: NUMBER_DOUBLE
+        config_name:
+          parameterType: STRING
+  comp-train-model-2:
+    executorLabel: exec-train-model-2
+    inputDefinitions:
+      artifacts:
+        input_csv:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        max_depth:
+          parameterType: NUMBER_INTEGER
+        n_estimators:
+          parameterType: NUMBER_INTEGER
+    outputDefinitions:
+      artifacts:
+        model_output:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        accuracy:
+          parameterType: NUMBER_DOUBLE
+        config_name:
+          parameterType: STRING
+  comp-train-model-3:
+    executorLabel: exec-train-model-3
+    inputDefinitions:
+      artifacts:
+        input_csv:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        max_depth:
+          parameterType: NUMBER_INTEGER
+        n_estimators:
+          parameterType: NUMBER_INTEGER
+    outputDefinitions:
+      artifacts:
+        model_output:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        accuracy:
+          parameterType: NUMBER_DOUBLE
+        config_name:
+          parameterType: STRING
+  comp-validate-data:
+    executorLabel: exec-validate-data
+    inputDefinitions:
+      artifacts:
+        input_csv:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-fetch-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - fetch_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef fetch_data(output_csv: dsl.Output[dsl.Dataset]):\n    from sklearn.datasets\
+          \ import load_iris\n    iris = load_iris(as_frame=True)\n    df = iris.frame\n\
+          \    df.to_csv(output_csv.path, index=False)\n    print(f\"Fetched {len(df)}\
+          \ rows.\")\n\n"
+        image: python:3.11-slim
+    exec-get-champion-accuracy:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - get_champion_accuracy
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef get_champion_accuracy() -> float:\n    import json\n    import\
+          \ os\n\n    registry_path = \"/tmp/registry/current_champion.json\"\n  \
+          \  if os.path.exists(registry_path):\n        with open(registry_path) as\
+          \ f:\n            data = json.load(f)\n        return data.get(\"accuracy\"\
+          , 0.0)\n    return 0.0  # No champion yet -- first run will always win\n\
+          \n"
+        image: python:3.11-slim
+    exec-register-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - register_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'joblib'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef register_model(\n    model: dsl.Input[dsl.Model],\n    accuracy:\
+          \ float,\n    config: str,\n    registered_model: dsl.Output[dsl.Model],\n\
+          ):\n    import json\n    import shutil\n    import time\n\n    version =\
+          \ int(time.time())  # simple version tag: unix timestamp\n    print(f\"\
+          Registering new champion model, version={version}, accuracy={accuracy:.4f},\
+          \ config={config}\")\n\n    shutil.copy(model.path, registered_model.path)\n\
+          \n    # Record this as the new champion (in a real system: push to a model\
+          \ registry / object store)\n    metadata = {\n        \"version\": version,\n\
+          \        \"accuracy\": accuracy,\n        \"config\": config,\n    }\n \
+          \   print(f\"Registry metadata: {json.dumps(metadata, indent=2)}\")\n\n"
+        image: python:3.11-slim
+    exec-select-best-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - select_best_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef select_best_model(\n    model_a: dsl.Input[dsl.Model],\n    model_b:\
+          \ dsl.Input[dsl.Model],\n    model_c: dsl.Input[dsl.Model],\n    accuracy_a:\
+          \ float,\n    accuracy_b: float,\n    accuracy_c: float,\n    config_a:\
+          \ str,\n    config_b: str,\n    config_c: str,\n    best_model: dsl.Output[dsl.Model],\n\
+          ) -> NamedTuple(\"Outputs\", [(\"best_accuracy\", float), (\"best_config\"\
+          , str)]):\n    import shutil\n    from collections import namedtuple\n\n\
+          \    candidates = [\n        (accuracy_a, config_a, model_a.path),\n   \
+          \     (accuracy_b, config_b, model_b.path),\n        (accuracy_c, config_c,\
+          \ model_c.path),\n    ]\n    candidates.sort(key=lambda x: x[0], reverse=True)\n\
+          \    winner_accuracy, winner_config, winner_path = candidates[0]\n\n   \
+          \ print(\"Hyperparameter tuning results:\")\n    for acc, cfg, _ in candidates:\n\
+          \        print(f\"  {cfg}: {acc:.4f}\")\n    print(f\"WINNER: {winner_config}\
+          \ with accuracy {winner_accuracy:.4f}\")\n\n    shutil.copy(winner_path,\
+          \ best_model.path)\n\n    Outputs = namedtuple(\"Outputs\", [\"best_accuracy\"\
+          , \"best_config\"])\n    return Outputs(best_accuracy=winner_accuracy, best_config=winner_config)\n\
+          \n"
+        image: python:3.11-slim
+    exec-train-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \ 'joblib'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(\n    input_csv: dsl.Input[dsl.Dataset],\n    n_estimators:\
+          \ int,\n    max_depth: int,\n    model_output: dsl.Output[dsl.Model],\n\
+          ) -> NamedTuple(\"Outputs\", [(\"accuracy\", float), (\"config_name\", str)]):\n\
+          \    import pandas as pd\n    import joblib\n    from sklearn.model_selection\
+          \ import train_test_split\n    from sklearn.ensemble import RandomForestClassifier\n\
+          \    from sklearn.metrics import accuracy_score\n    from collections import\
+          \ namedtuple\n\n    df = pd.read_csv(input_csv.path)\n    X = df.drop(columns=[\"\
+          target\"])\n    y = df[\"target\"]\n\n    X_train, X_test, y_train, y_test\
+          \ = train_test_split(\n        X, y, test_size=0.2, random_state=42, stratify=y\n\
+          \    )\n\n    model = RandomForestClassifier(\n        n_estimators=n_estimators,\
+          \ max_depth=max_depth, random_state=42\n    )\n    model.fit(X_train, y_train)\n\
+          \n    accuracy = accuracy_score(y_test, model.predict(X_test))\n    config_name\
+          \ = f\"n_estimators={n_estimators}_max_depth={max_depth}\"\n\n    print(f\"\
+          [{config_name}] Accuracy: {accuracy:.4f}\")\n    joblib.dump(model, model_output.path)\n\
+          \n    Outputs = namedtuple(\"Outputs\", [\"accuracy\", \"config_name\"])\n\
+          \    return Outputs(accuracy=accuracy, config_name=config_name)\n\n"
+        image: python:3.11-slim
+    exec-train-model-2:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \ 'joblib'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(\n    input_csv: dsl.Input[dsl.Dataset],\n    n_estimators:\
+          \ int,\n    max_depth: int,\n    model_output: dsl.Output[dsl.Model],\n\
+          ) -> NamedTuple(\"Outputs\", [(\"accuracy\", float), (\"config_name\", str)]):\n\
+          \    import pandas as pd\n    import joblib\n    from sklearn.model_selection\
+          \ import train_test_split\n    from sklearn.ensemble import RandomForestClassifier\n\
+          \    from sklearn.metrics import accuracy_score\n    from collections import\
+          \ namedtuple\n\n    df = pd.read_csv(input_csv.path)\n    X = df.drop(columns=[\"\
+          target\"])\n    y = df[\"target\"]\n\n    X_train, X_test, y_train, y_test\
+          \ = train_test_split(\n        X, y, test_size=0.2, random_state=42, stratify=y\n\
+          \    )\n\n    model = RandomForestClassifier(\n        n_estimators=n_estimators,\
+          \ max_depth=max_depth, random_state=42\n    )\n    model.fit(X_train, y_train)\n\
+          \n    accuracy = accuracy_score(y_test, model.predict(X_test))\n    config_name\
+          \ = f\"n_estimators={n_estimators}_max_depth={max_depth}\"\n\n    print(f\"\
+          [{config_name}] Accuracy: {accuracy:.4f}\")\n    joblib.dump(model, model_output.path)\n\
+          \n    Outputs = namedtuple(\"Outputs\", [\"accuracy\", \"config_name\"])\n\
+          \    return Outputs(accuracy=accuracy, config_name=config_name)\n\n"
+        image: python:3.11-slim
+    exec-train-model-3:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \ 'joblib'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(\n    input_csv: dsl.Input[dsl.Dataset],\n    n_estimators:\
+          \ int,\n    max_depth: int,\n    model_output: dsl.Output[dsl.Model],\n\
+          ) -> NamedTuple(\"Outputs\", [(\"accuracy\", float), (\"config_name\", str)]):\n\
+          \    import pandas as pd\n    import joblib\n    from sklearn.model_selection\
+          \ import train_test_split\n    from sklearn.ensemble import RandomForestClassifier\n\
+          \    from sklearn.metrics import accuracy_score\n    from collections import\
+          \ namedtuple\n\n    df = pd.read_csv(input_csv.path)\n    X = df.drop(columns=[\"\
+          target\"])\n    y = df[\"target\"]\n\n    X_train, X_test, y_train, y_test\
+          \ = train_test_split(\n        X, y, test_size=0.2, random_state=42, stratify=y\n\
+          \    )\n\n    model = RandomForestClassifier(\n        n_estimators=n_estimators,\
+          \ max_depth=max_depth, random_state=42\n    )\n    model.fit(X_train, y_train)\n\
+          \n    accuracy = accuracy_score(y_test, model.predict(X_test))\n    config_name\
+          \ = f\"n_estimators={n_estimators}_max_depth={max_depth}\"\n\n    print(f\"\
+          [{config_name}] Accuracy: {accuracy:.4f}\")\n    joblib.dump(model, model_output.path)\n\
+          \n    Outputs = namedtuple(\"Outputs\", [\"accuracy\", \"config_name\"])\n\
+          \    return Outputs(accuracy=accuracy, config_name=config_name)\n\n"
+        image: python:3.11-slim
+    exec-validate-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - validate_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef validate_data(input_csv: dsl.Input[dsl.Dataset]):\n    import\
+          \ pandas as pd\n    import sys\n\n    df = pd.read_csv(input_csv.path)\n\
+          \    errors = []\n\n    expected_columns = [\n        \"sepal length (cm)\"\
+          , \"sepal width (cm)\",\n        \"petal length (cm)\", \"petal width (cm)\"\
+          , \"target\"\n    ]\n    if list(df.columns) != expected_columns:\n    \
+          \    errors.append(f\"Column mismatch: {list(df.columns)}\")\n    if len(df)\
+          \ < 50:\n        errors.append(f\"Too few rows: {len(df)}\")\n    if df.isnull().values.any():\n\
+          \        errors.append(\"Null values found\")\n    feature_cols = expected_columns[:-1]\n\
+          \    for col in feature_cols:\n        if (df[col] <= 0).any() or (df[col]\
+          \ > 20).any():\n            errors.append(f\"Out-of-range values in '{col}'\"\
+          )\n    if set(df[\"target\"].unique()) - {0, 1, 2}:\n        errors.append(\"\
+          Unexpected target classes\")\n\n    if errors:\n        print(\"VALIDATION\
+          \ FAILED:\")\n        for e in errors:\n            print(f\"  - {e}\")\n\
+          \        sys.exit(1)\n    print(f\"VALIDATION PASSED: {len(df)} rows OK.\"\
+          )\n\n"
+        image: python:3.11-slim
+pipelineInfo:
+  description: Fetch, validate, parallel hyperparameter-tune, select best, compare
+    vs champion, register+deploy if better
+  name: iris-advanced-mlops-pipeline
+root:
+  dag:
+    tasks:
+      condition-1:
+        componentRef:
+          name: comp-condition-1
+        dependentTasks:
+        - get-champion-accuracy
+        - select-best-model
+        inputs:
+          artifacts:
+            pipelinechannel--select-best-model-best_model:
+              taskOutputArtifact:
+                outputArtifactKey: best_model
+                producerTask: select-best-model
+          parameters:
+            pipelinechannel--get-champion-accuracy-Output:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: get-champion-accuracy
+            pipelinechannel--select-best-model-best_accuracy:
+              taskOutputParameter:
+                outputParameterKey: best_accuracy
+                producerTask: select-best-model
+            pipelinechannel--select-best-model-best_config:
+              taskOutputParameter:
+                outputParameterKey: best_config
+                producerTask: select-best-model
+        taskInfo:
+          name: promote-if-better
+        triggerPolicy:
+          condition: inputs.parameter_values['pipelinechannel--select-best-model-best_accuracy']
+            > inputs.parameter_values['pipelinechannel--get-champion-accuracy-Output']
+      fetch-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-fetch-data
+        taskInfo:
+          name: fetch-data
+      get-champion-accuracy:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-get-champion-accuracy
+        taskInfo:
+          name: get-champion-accuracy
+      select-best-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-select-best-model
+        dependentTasks:
+        - train-model
+        - train-model-2
+        - train-model-3
+        inputs:
+          artifacts:
+            model_a:
+              taskOutputArtifact:
+                outputArtifactKey: model_output
+                producerTask: train-model
+            model_b:
+              taskOutputArtifact:
+                outputArtifactKey: model_output
+                producerTask: train-model-2
+            model_c:
+              taskOutputArtifact:
+                outputArtifactKey: model_output
+                producerTask: train-model-3
+          parameters:
+            accuracy_a:
+              taskOutputParameter:
+                outputParameterKey: accuracy
+                producerTask: train-model
+            accuracy_b:
+              taskOutputParameter:
+                outputParameterKey: accuracy
+                producerTask: train-model-2
+            accuracy_c:
+              taskOutputParameter:
+                outputParameterKey: accuracy
+                producerTask: train-model-3
+            config_a:
+              taskOutputParameter:
+                outputParameterKey: config_name
+                producerTask: train-model
+            config_b:
+              taskOutputParameter:
+                outputParameterKey: config_name
+                producerTask: train-model-2
+            config_c:
+              taskOutputParameter:
+                outputParameterKey: config_name
+                producerTask: train-model-3
+        taskInfo:
+          name: select-best-model
+      train-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-model
+        dependentTasks:
+        - fetch-data
+        - validate-data
+        inputs:
+          artifacts:
+            input_csv:
+              taskOutputArtifact:
+                outputArtifactKey: output_csv
+                producerTask: fetch-data
+          parameters:
+            max_depth:
+              runtimeValue:
+                constant: 3.0
+            n_estimators:
+              runtimeValue:
+                constant: 50.0
+        taskInfo:
+          name: train-model
+      train-model-2:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-model-2
+        dependentTasks:
+        - fetch-data
+        - validate-data
+        inputs:
+          artifacts:
+            input_csv:
+              taskOutputArtifact:
+                outputArtifactKey: output_csv
+                producerTask: fetch-data
+          parameters:
+            max_depth:
+              runtimeValue:
+                constant: 5.0
+            n_estimators:
+              runtimeValue:
+                constant: 100.0
+        taskInfo:
+          name: train-model-2
+      train-model-3:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-model-3
+        dependentTasks:
+        - fetch-data
+        - validate-data
+        inputs:
+          artifacts:
+            input_csv:
+              taskOutputArtifact:
+                outputArtifactKey: output_csv
+                producerTask: fetch-data
+          parameters:
+            max_depth:
+              runtimeValue:
+                constant: 10.0
+            n_estimators:
+              runtimeValue:
+                constant: 200.0
+        taskInfo:
+          name: train-model-3
+      validate-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-validate-data
+        dependentTasks:
+        - fetch-data
+        inputs:
+          artifacts:
+            input_csv:
+              taskOutputArtifact:
+                outputArtifactKey: output_csv
+                producerTask: fetch-data
+        taskInfo:
+          name: validate-data
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.16.1
