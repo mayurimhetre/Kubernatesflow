@@ -101,7 +101,11 @@ The trained model is packaged into a small web service (built with FastAPI) and 
 ---
 Kubeflow Diagram
 
+1. Simple flow for model training
 ![Kubeflow Diagram](screenshots/kubeflow_pipeline.png)
+
+2. Updated flow with hyperparameter tuning in parallel
+![Updated Kubeflow Diagram](screenshots/updated_kubeflow_pipeline.png)
 ---
 
 ## How to run this yourself
